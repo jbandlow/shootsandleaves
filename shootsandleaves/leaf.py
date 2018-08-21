@@ -1,103 +1,168 @@
 r"""Utility functions for extracting data from dictionaries.
 
 ```
->>> lf = Leaf(['a', 'b', 1, slice(1,5)], default='foo')
->>> lf.extract_from(obj)
+>>> lf = Leaf(('a', 'b', 1, slice(1,5)), default='foo')
+>>> lf.get_from(obj)
 ```
 
 ```
 >>> lf = Leaf('a.b.1.3:5', default='bar')
->>> lf.extract_from(obj)
+>>> lf.get_from(obj)
 ```
 
 ```
->>> get_field(obj, 'dot.notation.selector', default='d')
->>> get_field(obj, (1, '1', slice(1,3), 'foo'))
+>>> get(obj, 'dot.notation.selector', default='d')
+>>> get(obj, (1, '1', slice(1,3), 'foo'))
 ```
 """
+from collections import Hashable
+from copy import deepcopy
 from six import string_types
 
-# We use `nan` for a missing value to avoid coincidental matching.
-# In other words, we want the following behavior:
-# {'a': float('nan')}.get('b', MISSING_VALUE) is MISSING_VALUE
-# {'a': float('nan')}.get('a', MISSING_VALUE) is not MISSING_VALUE
-MISSING_VALUE = float('nan')
+# Sentinel for missing values. This can never coincidentally equal
+# external data.
+_MISSING_VALUE = object()
 
 
-def get_field(obj, selector, default=None):
+def get(obj, selector, default=None):
     r"""Safely extract data from obj.
 
     Args:
         - obj: A possibly nested object.
-        - selector: A list or dotted string of fields to recursively
-          extract. slice objects are ok.
+        - selector: An iterator or dotted string of fields to
+          recursively extract. `slice` objects are ok.
         - default: Value to return if the leaf value cannot be reached.
 
-    If the leaf value is None, None will be returned (instead of
-    whatever `default` happens to be).
+    For more details, see the documentation for `Leaf`.
     """
-    lf = Leaf(selector, default=default)
-    return lf.extract_from(obj)
+    return Leaf(selector, default=default).get_from(obj)
 
 
 class Leaf(object):
-    r"""A specification for extracting data from an object."""
+    r"""A specification for extracting data from an object.
 
-    def _extract_explicit_selector_list(self, selector_string):
-        r"""TODO."""
-        selector_list = []
-        for selector in selector_string.split('.'):
+    A Leaf is an abstraction for extending `get` semantics to
+    deeply-nested JSON-like objects. They are constructed with a
+    selector and a default value (which itself defaults to `None`).  An
+    example is probably helpful at this point:
+
+    ```python
+    >>> leaf = Leaf(('I', 'A', 2), default='missing')
+    >>> outline = {'I': {'A': ['eats', 'shoots', 'leaves']}}
+    >>> assert leaf.get_from(outline) == 'leaves'
+    >>> assert leaf.get_from({}) == 'missing'
+    >>> assert leaf.get_from(None) == 'missing'
+    ```
+
+    It is often convenient to specify the selector as a '.'-separated
+    string. For example,
+
+    ```python
+    >>> leaf = Leaf('I.A.2', default='missing')
+    ```
+
+    is equivalent to the leaf described above.  For more details on
+    this form, see the `__init__` docstring.
+    """
+
+    def __init__(self, selector, default=None):
+        r"""Construct a Leaf.
+
+        Args:
+            - selector: A selector can be passed in one of three forms:
+                1. An iterable of objects. Each of these objects must
+                be either hashable or an instance of `slice`.
+
+                2. Another Leaf. The selector **and default** from this
+                Leaf will be used. Passing in a default parameter will
+                raise an error when this form is used.
+
+                3. A string. This will be split on '.'. If any of the
+                elements contain ':', they will be parsed as a slice. If
+                any of the elements can be parsed as an integer, they
+                will be. The remaining elements will remain strings.
+
+
+            - default: The value that `get_from` will return if the
+              leaf field is not present in a given object.
+
+        Internally, selectors are always stored as tuples, regardless of
+        what form of the parameter was used.
+        """
+        self.default = default
+
+        if isinstance(selector, string_types):
+            self.selector = self._create_explicit_selector(selector)
+        elif isinstance(selector, Leaf):
+            self.selector = deepcopy(selector.selector)
+            if default is not None:
+                raise ValueError('Setting the default value is not permitted '
+                                 'when constructing a Leaf from another Leaf.')
+            self.default = selector.default
+        else:
+            self.selector = selector
+        assert all(
+            isinstance(field, (Hashable, slice)) for field in self.selector)
+        self.selector = tuple(self.selector)
+
+    def _create_explicit_selector(self, selector_string):
+        r"""Return a selector list from a .-separated selector string."""
+        selector = []
+        for selector_field in selector_string.split('.'):
             # If there's a :, interpret as a slice.
-            if ':' in selector:
+            if ':' in selector_field:
+                # Create arguments to `slice` like so: ':2' --> [None, 2]
                 slice_args = [
                     int(_) if _ != '' else None
-                    for _ in selector.split(':')
+                    for _ in selector_field.split(':')
                 ]
-                selector_list.append(slice(*slice_args))
+                selector.append(slice(*slice_args))
             else:
                 try:
                     # If it looks like an integer, make it one.
-                    selector_list.append(int(selector))
+                    selector.append(int(selector_field))
                 except ValueError:
                     # At this point, it can only be a string.
-                    selector_list.append(selector)
-        return selector_list
+                    selector.append(selector_field)
+        return selector
 
-    def __init__(self, selector_list, default=None):
-        r"""TODO."""
-        if isinstance(selector_list, string_types):
-            self.selector_list = self._extract_explicit_selector_list(
-                selector_list)
-        elif isinstance(selector_list, Leaf):
-            # TODO: Implement a proper copy constructor
-            other = selector_list
-            self.selector_list = other.selector_list
-            self.default = other.default
-        else:
-            self.selector_list = selector_list
-        if '' in self.selector_list:
-            raise ValueError('Empty selectors are invalid. '
-                             f'Selector list: {self.selector_list}')
+    def __repr__(self):
+        r"""Return repr string for self."""
+        return f'Leaf({self.selector}, default={self.default})'
 
-        self.default = default
+    def get_from(self, obj):
+        r"""Attempt to extract a leaf field from `obj`.
 
-    def extract_from(self, obj):
-        r"""TODO."""
-        if self.selector_list is None:
+        Args:
+            - obj: Any object
+
+        Returns:
+            - The value at the field of `obj` specified by
+              `self.selector`, or `self.default` if this field is not
+              accessible.
+
+        The algorithm is to recursively travel through `obj`, using the
+        selector fields from left to right. First we check if the object
+        has a `get` attribute. If so, we either use `obj.get(field)` for
+        the next level, or we return `self.default` if `field` is not
+        present. If `get` is not an attribute, we attempt to get the
+        next level with `obj[field]`.  If this raises an `IndexError` or
+        `TypeError`, we catch the error and return `self.default`.
+
+        """
+        if self.selector is None:
             return obj
-        for selector in self.selector_list:
+        for selector in self.selector:
             if hasattr(obj, 'get'):
                 try:
-                    obj = obj.get(selector, MISSING_VALUE)
-                    if obj is MISSING_VALUE:
+                    obj = obj.get(selector, _MISSING_VALUE)
+                    if obj is _MISSING_VALUE:
                         return self.default
                 except TypeError:
                     return self.default
-            elif hasattr(obj, '__getitem__'):
+            else:
                 try:
                     obj = obj[selector]
                 except (TypeError, IndexError):
                     return self.default
-            else:
-                return self.default
         return obj

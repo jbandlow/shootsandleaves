@@ -1,6 +1,7 @@
 """Test utility functions."""
+from pytest import raises
 
-from shootsandleaves.leaf import get_field
+from shootsandleaves.leaf import get, Leaf
 
 dict_blob = {
     'I': {
@@ -37,72 +38,98 @@ list_blob = [dict_blob, [[1, 2, 3], 4, 5]]
 def test_get_field_when_field_exists():
     """Extract fields that are present."""
     # Dictionary selectors only
-    selector_list = ['II', 'A', '1', 'a']
-    assert get_field(dict_blob, selector_list) == 'deep'
+    selector = ['II', 'A', '1', 'a']
+    assert get(dict_blob, selector) == 'deep'
 
     # Dictionary selectors with integer
-    selector_list = ['II', 'A', 2]
-    assert get_field(dict_blob, selector_list) == 'integer_key'
-    field_str = 'II.A.2'
-    assert get_field(dict_blob, field_str) == 'integer_key'
+    selector = ['II', 'A', 2]
+    assert get(dict_blob, selector) == 'integer_key'
+    selector = 'II.A.2'
+    assert get(dict_blob, selector) == 'integer_key'
 
     # Integer list selectors only
-    selector_list = [1, 2]
-    assert get_field(list_blob, selector_list) == 5
-    field_str = '1.2'
-    assert get_field(list_blob, field_str) == 5
+    selector = [1, 2]
+    assert get(list_blob, selector) == 5
+    selector = '1.2'
+    assert get(list_blob, selector) == 5
 
     # List selectors with slice selector
-    selector_list = [1, slice(1, None)]
-    assert get_field(list_blob, selector_list) == [4, 5]
-    field_str = '1.1:'
-    assert get_field(list_blob, field_str) == [4, 5]
+    selector = [1, slice(1, None)]
+    assert get(list_blob, selector) == [4, 5]
+    selector = '1.1:'
+    assert get(list_blob, selector) == [4, 5]
 
     # None is returned instead of default
-    selector_list = ['I', 'B']
-    assert get_field(dict_blob, selector_list, 'default') is None
+    selector = ['I', 'B']
+    assert get(dict_blob, selector, 'default') is None
 
     # Mixed indices
-    selector_list = [slice(2), 0, 'I', 'A', 0, '1', 0, 'a']
-    assert get_field(list_blob, selector_list) == 'nested_deep'
+    selector = [slice(2), 0, 'I', 'A', 0, '1', 0, 'a']
+    assert get(list_blob, selector) == 'nested_deep'
 
     # Deep objects are returned
-    selector_list = [0]
-    assert get_field(list_blob, selector_list) is dict_blob
+    selector = [0]
+    assert get(list_blob, selector) is dict_blob
 
     # Empty indexing returns the input
-    selector_list = []
-    assert get_field(dict_blob, selector_list) is dict_blob
-    assert get_field(list_blob, selector_list) is list_blob
+    selector = []
+    assert get(dict_blob, selector) is dict_blob
+    assert get(list_blob, selector) is list_blob
 
 
 def test_get_field_when_field_is_missing():
     """Extraction does not raise exceptions on missing or malformed fields."""
     # Missing key returns default value
-    selector_list = ['missing']
-    assert get_field(dict_blob, selector_list) is None
-    assert get_field(dict_blob, selector_list, 'default') == 'default'
+    selector = ['missing']
+    assert get(dict_blob, selector) is None
+    assert get(dict_blob, selector, 'default') == 'default'
 
     # Deep missing keys return default value
-    selector_list = ['II', 'missing']
-    assert get_field(dict_blob, selector_list, 'default') == 'default'
+    selector = ['II', 'missing']
+    assert get(dict_blob, selector, 'default') == 'default'
 
     # Unhashable dict keys returns default value
-    selector_list = [slice(1, None)]
-    assert get_field(dict_blob, selector_list, 'default') == 'default'
+    selector = [slice(1, None)]
+    assert get(dict_blob, selector, 'default') == 'default'
 
     # Non-integer index into list returns default value
-    selector_list = ['string']
-    assert get_field(list_blob, selector_list, 'default') == 'default'
+    selector = ['string']
+    assert get(list_blob, selector, 'default') == 'default'
 
     # Out of range index into list returns default value
-    selector_list = [100000]
-    assert get_field(list_blob, selector_list, 'default') == 'default'
+    selector = [100000]
+    assert get(list_blob, selector, 'default') == 'default'
 
     # Out of range slice into list returns empty list
-    selector_list = [slice(10000, None)]
-    assert get_field(list_blob, selector_list, 'default') == []
+    selector = [slice(10000, None)]
+    assert get(list_blob, selector, 'default') == []
 
     # Index into empty list returns default value
-    selector_list = ['I', 'A', 0, '2', 0]
-    assert get_field(dict_blob, selector_list, 'default') == 'default'
+    selector = ['I', 'A', 0, '2', 0]
+    assert get(dict_blob, selector, 'default') == 'default'
+
+    # Iteration into default value does not occur
+    selector = ['a', 'b']
+    default = {'b': 'c'}
+    # These are NOT the semantics we want:
+    assert {}.get('a', default).get('b', default) == 'c'
+    # We want this instead:
+    assert get({}, selector, default=default) is default
+
+
+def test_repr():
+    r"""Test that repr returns a useful string version of Leaf."""
+    lf = Leaf('a.-1.2:3.x', default=0)
+    assert repr(lf) == "Leaf(('a', -1, slice(2, 3, None), 'x'), default=0)"
+
+
+def test_copy_construction():
+    r"""Test the construction of a Leaf from another Leaf."""
+    leaf1 = Leaf('a.x', default=0)
+    leaf2 = Leaf(leaf1)
+    assert leaf1.selector == leaf2.selector
+    assert leaf1.default == leaf2.default
+    assert repr(leaf1) == repr(leaf2)
+
+    with raises(ValueError):
+        Leaf(leaf1, default=1)

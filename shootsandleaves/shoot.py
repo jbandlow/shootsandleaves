@@ -1,22 +1,6 @@
-r"""A specification for extracting a dataframe column from JSON.
-
-I am losing semantic clarity here. What is the precise definition of a
-leaf, and should it be a class by itself?
-There can be a top-level shortcut which constructs the Leaf:
-```
-def get_field(obj, leaf_constructor, default):
-    return Leaf(leaf_constructor, default).extract_from(object)
-```
-"""
+r"""A specification for extracting a dataframe column from JSON."""
 from copy import deepcopy
 from shootsandleaves.leaf import Leaf
-
-
-def _default_transform(args):
-    r"""Return a single argument by itself, o/w a tuple."""
-    if len(args) == 1:
-        return args[0]
-    return args
 
 
 class Shoot():
@@ -34,6 +18,7 @@ class Shoot():
         r"""TODO."""
         self.column_name = column_name
 
+        assert (leaves is None) or (explicit_leaves is None)
         if explicit_leaves is None:
             if leaves is None:
                 leaves = column_name
@@ -41,9 +26,18 @@ class Shoot():
                 leaves = [leaves]
             self.explicit_leaves = [Leaf(_, default) for _ in leaves]
         else:
+            assert all(type(leaf) is Leaf for leaf in explicit_leaves)
             self.explicit_leaves = explicit_leaves
 
-        self.transform = transform or _default_transform
+        if transform is None:
+            transform = lambda arg: arg  # noqa
+        # When there is only a single leaf value, the transform function
+        # should act on that value, not on a list.
+        if len(self.explicit_leaves) == 1:
+            self.transform = lambda arg: transform(arg[0])
+        else:
+            self.transform = transform
+
         self.strict = strict
         self.default = default
         self.dtype = dtype
@@ -66,12 +60,17 @@ class Shoot():
 
     def project(self, obj):
         r"""TODO."""
-        return [leaf.extract_from(obj) for leaf in self.explicit_leaves]
+        return [leaf.get_from(obj) for leaf in self.explicit_leaves]
 
     def extract(self, obj):
         r"""TODO."""
+        projection = self.project(obj)
+        # Do not attempt to transform a singleton default value
+        if len(projection) == 1 and projection[0] is self.default:
+            return self.default
+
         try:
-            return self.transform(self.project(obj))
+            return self.transform(projection)
         except Exception:
             if self.strict:
                 raise
