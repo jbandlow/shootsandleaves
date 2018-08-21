@@ -7,3 +7,5 @@ Pipfile.lock
 **.swp
 build/
 dist/
+docs/_build/
+docs/api/
