@@ -65,11 +65,11 @@ class Leaf(object):
     this form, see the `__init__` docstring.
     """
 
-    def __init__(self, selector, default=None):
+    def __init__(self, selector=None, default=None):
         r"""Construct a Leaf.
 
         Args:
-            - selector: A selector can be passed in one of three forms:
+            - selector: A selector can be passed in one of these forms:
                 1. An iterable of objects. Each of these objects must
                 be either hashable or an instance of `slice`.
 
@@ -82,6 +82,8 @@ class Leaf(object):
                 any of the elements can be parsed as an integer, they
                 will be. The remaining elements will remain strings.
 
+                4. None (the default). In this case, `get_from` will
+                always return the object it is passed.
 
             - default: The value that `get_from` will return if the
               leaf field is not present in a given object.
@@ -99,6 +101,8 @@ class Leaf(object):
                 raise ValueError('Setting the default value is not permitted '
                                  'when constructing a Leaf from another Leaf.')
             self.default = selector.default
+        elif selector is None:
+            self.selector = []
         else:
             self.selector = selector
         assert all(
@@ -150,8 +154,6 @@ class Leaf(object):
         `TypeError`, we catch the error and return `self.default`.
 
         """
-        if self.selector is None:
-            return obj
         for selector in self.selector:
             if hasattr(obj, 'get'):
                 try:

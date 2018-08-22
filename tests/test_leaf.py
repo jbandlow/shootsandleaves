@@ -76,6 +76,10 @@ def test_get_field_when_field_exists():
     assert get(dict_blob, selector) is dict_blob
     assert get(list_blob, selector) is list_blob
 
+    selector = None
+    assert get(dict_blob, selector) is dict_blob
+    assert get(list_blob, selector) is list_blob
+
 
 def test_get_field_when_field_is_missing():
     """Extraction does not raise exceptions on missing or malformed fields."""
