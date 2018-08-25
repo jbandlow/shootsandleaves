@@ -1,0 +1,26 @@
+[[source]]
+
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+
+[packages]
+
+"e1839a8" = {path = ".", editable = true}
+numpy = "*"
+
+
+[dev-packages]
+
+pytest = "*"
+ipython = "*"
+sphinx = "*"
+tox = "*"
+pytest-cov = "*"
+coverage = "*"
+
+
+[requires]
+
+python_version = "3.6"

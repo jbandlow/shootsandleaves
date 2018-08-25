@@ -89,8 +89,7 @@ def test_single_argument_transform():
     assert s.project(data) == [data['first_name']]
     assert s.extract(data) == data['first_name'].upper()
 
-    # Without strict=False (tested elsewhere), transform exceptions
-    # bubble up.
+    # Transform exceptions bubble up.
     s = Shoot('coordinates.x', transform=lambda _: _.upper())
     assert s.project(data) == [10]
     with raises(AttributeError):
@@ -118,17 +117,6 @@ def test_multiple_argument_transform():
         data['coordinates']['x'], data['coordinates']['y'], default
     ]
     assert s.extract(data) == sum(s.project(data))
-
-
-def test_non_strict_transform():
-    r"""Test that the default is returned when strict is false."""
-    s = Shoot(
-        'coordinates.x',
-        transform=lambda _: _.upper(),
-        strict=False,
-        default=float('nan'))
-    assert s.project(data) == [10]
-    assert s.extract(data) is s.default
 
 
 def test_explicit_leaves():

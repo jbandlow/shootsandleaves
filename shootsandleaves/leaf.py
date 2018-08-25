@@ -24,6 +24,27 @@ from six import string_types
 _MISSING_VALUE = object()
 
 
+def _create_explicit_selector(selector_string):
+    r"""Return a selector list from a .-separated selector string."""
+    selector = []
+    for selector_field in selector_string.split('.'):
+        # If there's a :, interpret as a slice.
+        if ':' in selector_field:
+            # Create arguments to `slice` like so: ':2' --> [None, 2]
+            slice_args = [
+                int(_) if _ != '' else None for _ in selector_field.split(':')
+            ]
+            selector.append(slice(*slice_args))
+        else:
+            try:
+                # If it looks like an integer, make it one.
+                selector.append(int(selector_field))
+            except ValueError:
+                # At this point, it can only be a string.
+                selector.append(selector_field)
+    return selector
+
+
 def get(obj, selector, default=None):
     r"""Safely extract data from obj.
 
@@ -63,6 +84,16 @@ class Leaf(object):
 
     is equivalent to the leaf described above.  For more details on
     this form, see the `__init__` docstring.
+
+    When a field of a selector is a slice, we "step into" the iterable
+    it is slicing, and apply the rest of the selector to each of those
+    objects. Again, this will be more clear with an example:
+
+    ```python
+    >>> data = {'purchases': [{'_id': 1}, {'_id': 2}, {valid: False}]}
+    >>> leaf = Leaf('purchases.:._id')
+    >>> assert leaf.get_from(data) == [1, 2, None]
+    ```
     """
 
     def __init__(self, selector=None, default=None):
@@ -94,7 +125,9 @@ class Leaf(object):
         self.default = default
 
         if isinstance(selector, string_types):
-            self.selector = self._create_explicit_selector(selector)
+            self.selector = _create_explicit_selector(selector)
+        elif isinstance(selector, slice):
+            self.selector = [selector]
         elif isinstance(selector, Leaf):
             self.selector = deepcopy(selector.selector)
             if default is not None:
@@ -107,64 +140,51 @@ class Leaf(object):
             self.selector = selector
         assert all(
             isinstance(field, (Hashable, slice)) for field in self.selector)
-        self.selector = tuple(self.selector)
 
-    def _create_explicit_selector(self, selector_string):
-        r"""Return a selector list from a .-separated selector string."""
-        selector = []
-        for selector_field in selector_string.split('.'):
-            # If there's a :, interpret as a slice.
-            if ':' in selector_field:
-                # Create arguments to `slice` like so: ':2' --> [None, 2]
-                slice_args = [
-                    int(_) if _ != '' else None
-                    for _ in selector_field.split(':')
-                ]
-                selector.append(slice(*slice_args))
-            else:
-                try:
-                    # If it looks like an integer, make it one.
-                    selector.append(int(selector_field))
-                except ValueError:
-                    # At this point, it can only be a string.
-                    selector.append(selector_field)
-        return selector
+        self.selector = tuple(self.selector)
+        self._internal_selector = [[]]
+        index = 0
+        for position, field in enumerate(self.selector):
+            self._internal_selector[index].append(field)
+            if (isinstance(field, slice)
+                    and position != len(self.selector) - 1):
+                self._internal_selector.append([])
+                index += 1
 
     def __repr__(self):
         r"""Return repr string for self."""
         return f'Leaf({self.selector}, default={self.default})'
 
-    def get_from(self, obj):
+    def get_from(self, obj, idx=0):
         r"""Attempt to extract a leaf field from `obj`.
 
         Args:
             - obj: Any object
+            - idx: The index of `self.selector` at which to start
+              the extraction.
 
         Returns:
             - The value at the field of `obj` specified by
               `self.selector`, or `self.default` if this field is not
               accessible.
 
-        The algorithm is to recursively travel through `obj`, using the
-        selector fields from left to right. First we check if the object
-        has a `get` attribute. If so, we either use `obj.get(field)` for
-        the next level, or we return `self.default` if `field` is not
-        present. If `get` is not an attribute, we attempt to get the
-        next level with `obj[field]`.  If this raises an `IndexError` or
-        `TypeError`, we catch the error and return `self.default`.
-
         """
-        for selector in self.selector:
-            if hasattr(obj, 'get'):
-                try:
-                    obj = obj.get(selector, _MISSING_VALUE)
-                    if obj is _MISSING_VALUE:
-                        return self.default
-                except TypeError:
-                    return self.default
-            else:
-                try:
-                    obj = obj[selector]
-                except (TypeError, IndexError):
-                    return self.default
+        # The main loop walks through the fields in `selector`, updating
+        # `obj` each time, and bailing if we need to return the default.
+        # If the field is a slice, there is special handling, see below.
+        while idx < len(self.selector):
+            field = self.selector[idx]
+            try:
+                obj = obj[field]
+            except (KeyError, IndexError, TypeError):
+                return self.default
+            idx += 1
+            if isinstance(field, slice):
+                # At this point, `field` is a slice, `obj` is an
+                # iterable (the valid result of having sliced
+                # something), and `idx` points to the next field to
+                # select. We recursively select from each of the items
+                # in `obj`, and then cast the result to be the same type
+                # of iterator as `obj`.
+                return type(obj)(self.get_from(item, idx=idx) for item in obj)
         return obj

@@ -1,10 +1,9 @@
 r"""A specification for extracting a dataframe column from JSON."""
-from copy import deepcopy
 from shootsandleaves.leaf import Leaf
 
 
 class Shoot():
-    r"""TODO."""
+    r"""TODO. This is a test."""
 
     def __init__(self,
                  column_name,
@@ -12,7 +11,6 @@ class Shoot():
                  transform=None,
                  default=None,
                  explicit_leaves=None,
-                 strict=True,
                  dtype=None,
                  **kwargs):
         r"""TODO."""
@@ -22,11 +20,12 @@ class Shoot():
         if explicit_leaves is None:
             if leaves is None:
                 leaves = column_name
-            if type(leaves) not in (list, tuple):
+            if not isinstance(leaves, (list, tuple)):
                 leaves = [leaves]
             self.explicit_leaves = [Leaf(_, default) for _ in leaves]
         else:
-            assert all(type(leaf) is Leaf for leaf in explicit_leaves)
+            assert all(
+                isinstance(leaf, Leaf) for leaf in explicit_leaves)
             self.explicit_leaves = explicit_leaves
 
         if transform is None:
@@ -38,25 +37,8 @@ class Shoot():
         else:
             self.transform = transform
 
-        self.strict = strict
         self.default = default
         self.dtype = dtype
-
-    def copy(self):
-        r"""Return a copy of self."""
-        # TODO: Do this properly
-        return Shoot(
-            self.column_name,
-            transform=self.transform,
-            default=deepcopy(self.default),
-            explicit_leaves=deepcopy(self.explicit_leaves))
-
-    def rename(self, name):
-        r"""Return a copy of self with new name."""
-        # TODO: Do this properly
-        rv = self.copy()
-        rv.column_name = name
-        return rv
 
     def project(self, obj):
         r"""TODO."""
@@ -69,9 +51,4 @@ class Shoot():
         if len(projection) == 1 and projection[0] is self.default:
             return self.default
 
-        try:
-            return self.transform(projection)
-        except Exception:
-            if self.strict:
-                raise
-            return self.default
+        return self.transform(projection)

@@ -39,10 +39,8 @@ Functions and objects in the ``shootsandleaves.shoot`` module.
         :toctree: api
 
         Shoot
-        Shoot.copy
         Shoot.extract
         Shoot.project
-        Shoot.rename
 
 Grove
 ------

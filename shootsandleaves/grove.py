@@ -26,17 +26,18 @@ class Grove(object):
 
     def extract(self, obj):
         r"""Return a dict mapping column_names to extracted values."""
-        return {s.column_name: s.extract(obj) for s in self.shoots}
+        return {shoot.column_name: shoot.extract(obj) for shoot in self.shoots}
 
     def dataframe_from_iterator(self, data):
         r"""TODO."""
         cols = {s.column_name: [] for s in self.shoots}
         for obj in data:
-            for s in self.shoots:
-                cols[s.column_name].append(s.extract(obj))
+            for shoot in self.shoots:
+                cols[shoot.column_name].append(shoot.extract(obj))
         cols = {
-            s.column_name: Series(cols[s.column_name], dtype=s.dtype)
-            for s in self.shoots
+            shoot.column_name: Series(
+                cols[shoot.column_name], dtype=shoot.dtype)
+            for shoot in self.shoots
         }
         df = DataFrame(cols)
         if self.index:

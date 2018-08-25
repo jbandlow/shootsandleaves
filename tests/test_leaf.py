@@ -53,19 +53,9 @@ def test_get_field_when_field_exists():
     selector = '1.2'
     assert get(list_blob, selector) == 5
 
-    # List selectors with slice selector
-    selector = [1, slice(1, None)]
-    assert get(list_blob, selector) == [4, 5]
-    selector = '1.1:'
-    assert get(list_blob, selector) == [4, 5]
-
     # None is returned instead of default
     selector = ['I', 'B']
     assert get(dict_blob, selector, 'default') is None
-
-    # Mixed indices
-    selector = [slice(2), 0, 'I', 'A', 0, '1', 0, 'a']
-    assert get(list_blob, selector) == 'nested_deep'
 
     # Deep objects are returned
     selector = [0]
@@ -79,6 +69,27 @@ def test_get_field_when_field_exists():
     selector = None
     assert get(dict_blob, selector) is dict_blob
     assert get(list_blob, selector) is list_blob
+
+
+def test_slice_indices():
+    """Test extraction when one or more field selectors is a slice."""
+    # Slice and stop.
+    selector = [1, slice(1, None)]
+    assert get(list_blob, selector) == [4, 5]
+    selector = '1.1:'
+    assert get(list_blob, selector) == [4, 5]
+
+    # Slice and continue.
+    selector = [slice(2), 'I', 'A', 0, '1', 0, 'a']
+    assert get(list_blob, selector) == ['nested_deep', None]
+
+    # Multiple slices.
+    selector = [slice(2), 'I', 'A', slice(None), '1', 0, 'a']
+    assert get(list_blob, selector) == [['nested_deep'], None]
+
+    # Single slice
+    selector = slice(1, None)
+    assert get(list_blob, selector) == [list_blob[1]]
 
 
 def test_get_field_when_field_is_missing():
