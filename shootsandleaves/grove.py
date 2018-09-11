@@ -26,7 +26,16 @@ class Grove(object):
 
     def extract(self, obj):
         r"""Return a dict mapping column_names to extracted values."""
-        return {shoot.column_name: shoot.extract(obj) for shoot in self.shoots}
+        out = {
+            shoot.column_name: shoot.extract(obj)
+            for shoot in self.shoots if not shoot.expand_dict
+        }
+        for shoot in self.shoots:
+            if shoot.expand_dict:
+                value = shoot.extract(obj)
+                if isinstance(value, dict):
+                    out.update(value)
+        return out
 
     def dataframe_from_iterator(self, data):
         r"""TODO."""
