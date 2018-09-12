@@ -22,9 +22,12 @@ class Shoot():
             self.column_name = column_name
 
         assert (leaves is None) or (explicit_leaves is None)
-        if explicit_leaves is None:
+        if leaves is None and explicit_leaves is None:
             if leaves is None:
-                leaves = self.column_name
+                if expand_dict:
+                    self.explicit_leaves = [Leaf(())]
+                else:
+                    leaves = self.column_name
             if not isinstance(leaves, (list, tuple)):
                 leaves = [leaves]
             self.explicit_leaves = [Leaf(_, default) for _ in leaves]
@@ -47,7 +50,10 @@ class Shoot():
 
     def project(self, obj):
         r"""TODO."""
-        return [leaf.get_from(obj) for leaf in self.explicit_leaves]
+        if not self.expand_dict:
+            return [leaf.get_from(obj) for leaf in self.explicit_leaves]
+        else:
+            return
 
     def extract(self, obj):
         r"""TODO."""
