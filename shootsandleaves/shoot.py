@@ -17,21 +17,19 @@ class Shoot():
         r"""TODO."""
         if column_name is None:
             expand_dict = True
-            self.column_name = str(uuid.uuid4())
-        else:
-            self.column_name = column_name
+        self.column_name = column_name or str(uuid.uuid4())
 
         assert (leaves is None) or (explicit_leaves is None)
         if leaves is None and explicit_leaves is None:
-            if leaves is None:
-                if expand_dict:
-                    self.explicit_leaves = [Leaf(())]
-                else:
-                    leaves = self.column_name
+            if expand_dict:
+                self.explicit_leaves = [Leaf((), default)]
+            else:
+                self.explicit_leaves = [Leaf(self.column_name, default)]
+        elif explicit_leaves is None:  # leaves is not None
             if not isinstance(leaves, (list, tuple)):
                 leaves = [leaves]
             self.explicit_leaves = [Leaf(_, default) for _ in leaves]
-        else:
+        else:  # explicit_leaves is not None
             assert all(isinstance(leaf, Leaf) for leaf in explicit_leaves)
             self.explicit_leaves = explicit_leaves
 

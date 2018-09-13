@@ -8,12 +8,6 @@ from pytest import raises
 from shootsandleaves.leaf import Leaf
 from shootsandleaves.shoot import Shoot
 
-
-def argspread(f):
-    r"""Transform functions with single arg to accept many."""
-    return lambda *args: f(args)
-
-
 data = {
     'first_name':
     'Apple',
