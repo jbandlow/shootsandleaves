@@ -39,15 +39,35 @@ class Grove(object):
 
     def dataframe_from_iterator(self, data):
         r"""TODO."""
-        cols = {s.column_name: [] for s in self.shoots}
-        for obj in data:
-            for shoot in self.shoots:
-                cols[shoot.column_name].append(shoot.extract(obj))
-        cols = {
-            shoot.column_name: Series(
-                cols[shoot.column_name], dtype=shoot.dtype)
-            for shoot in self.shoots
+        cols = {s.column_name: [] for s in self.shoots if not s.expand_dict}
+        defaults = {
+            s.column_name: s.default
+            for s in self.shoots if not s.expand_dict
         }
+        dtypes = {
+            s.column_name: s.dtype
+            for s in self.shoots if not s.expand_dict
+        }
+        for row, obj in enumerate(data):
+            for shoot in self.shoots:
+                if not shoot.expand_dict:
+                    cols[shoot.column_name].append(shoot.extract(obj))
+                else:
+                    sub_object = shoot.extract(obj)
+                    if isinstance(sub_object, dict):
+                        for key, value in sub_object.items():
+                            if key not in cols:
+                                # Initialize
+                                cols[key] = [shoot.default] * row
+                                defaults[key] = shoot.default
+                                dtypes[key] = shoot.dtype
+                            cols[key].append(value)
+            for col in cols:
+                if len(cols[col]) != row + 1:
+                    cols[col].append(defaults[col])
+
+        for dt in dtypes:
+            cols[dt] = Series(cols[dt], dtype=dtypes[dt])
         df = DataFrame(cols)
         if self.index:
             df.set_index(self.index, inplace=True)
